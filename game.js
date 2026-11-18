@@ -7,29 +7,46 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 const $=id=>document.getElementById(id);
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
-const MAX_TANK=20;
-const LV_NAME=['','Lv1','Lv2','Lv3','Lv4','Lv5'];
-const LV_CLS=['','r0','r1','r1','r2','r3'];
+const VAR_MAX=10;                 // 어항에 함께 있을 수 있는 변종 수
 const CYCLE=960; // 게임 속 하루 = 16분
 
 /* ---------------- 경제 ---------------- */
-const INC=lv=>0.1*Math.pow(3,lv-1);            // 물고기 1마리가 1초에 버는 코인
-const SUM_T=[0,10,25,45,70,100,140,190,250,320,400,500]; // 부르기 레벨이 오르는 누적 횟수
-const sumLevel=n=>SUM_T.filter(t=>n>=t).length;
-const sumCost=L=>Math.round(10*Math.pow(1.3,L-1));
-function sumRoll(L){
-  const p4=L>=9?Math.min(0.03*(L-8),0.08):0,
-        p3=L>=5?Math.min(0.05*(L-4),0.2):0,
-        p2=L>=2?Math.min(0.07*(L-1),0.35):0, r=Math.random();
-  if(r<p4) return 4; if(r<p4+p3) return 3; if(r<p4+p3+p2) return 2; return 1;
+const INC=st=>0.3*Math.pow(1.47,st-1);   // 일반 물고기 1마리가 1초에 버는 코인
+const SHOP=[
+  {id:'tank',name:'어항 넓히기',desc:'어항 자리 +1',base:30,g:1.45,max:28},
+  {id:'food',name:'먹이 통',desc:'먹이를 1개 더 모아 둘 수 있어요',base:20,g:1.5,max:20},
+  {id:'regen',name:'먹이 충전',desc:'먹이가 0.5초 더 빨리 차요',base:25,g:1.55,max:12},
+  {id:'feedUp',name:'먹이 업그레이드',desc:'먹이로 오는 친구가 한 단계 높아져요',base:120,g:1.9,max:44},
+  {id:'jump',name:'두 단계 점프',desc:'합칠 때 2단계가 한꺼번에 오를 확률 +2%',base:60,g:1.6,max:20},
+  {id:'auto',name:'자동 합치기',desc:'알아서 같은 친구끼리 합쳐 줘요 (Lv마다 1초씩 빨라짐)',base:200,g:1.6,max:20},
+  {id:'autofeed',name:'자동 먹이',desc:'알아서 먹이를 줘요 (Lv마다 1초씩 빨라짐)',base:150,g:1.6,max:16},
+  {id:'coin',name:'코인 부스트',desc:'버는 코인 +10%',base:100,g:1.8,max:50}
+];
+let BON={};
+function refreshBonus(){
+  BON={coin:0,slot:0,disc:0,jump:0,luck:0,up:0,feed:0,cap:0};
+  for(const s of DEX) if(s.bonus&&game.owned[s.id]) for(const k in s.bonus) BON[k]+=s.bonus[k];
 }
+const UP=k=>game.up[k]||0;
+const tankMax=()=>12+UP('tank')+BON.slot;
+const foodMax=()=>5+UP('food')+BON.cap;
+const regenT=()=>Math.max(1.5,8-0.5*UP('regen')-BON.feed);
+const feedStage=()=>Math.min(MAX_STAGE,1+UP('feedUp'));
+const jumpP=()=>Math.min(0.5,(UP('jump')*2+BON.jump)/100);
+const luckP=()=>Math.min(0.3,0.04+BON.luck/100);
+const upP=()=>Math.min(0.5,BON.up/100);
+const coinMul=()=>1+0.1*UP('coin')+BON.coin/100;
+const disc=()=>Math.min(0.5,BON.disc/100);
+const autoT=()=>Math.max(6,26-UP('auto'));
+const autoFeedT=()=>Math.max(4,21-UP('autofeed'));
+const shopCost=it=>Math.round(it.base*Math.pow(it.g,UP(it.id))*(1-disc()));
 
 /* ---------------- 저장 ---------------- */
-const SAVE_KEY='pixel-aquarium-v3';
+const SAVE_KEY='pixel-aquarium-v4';
 function fresh(){
   const code=String(Math.floor(1000+Math.random()*9000));
-  return {coins:10,sumCount:0,sumLv:1,owned:{yellow:2},tank:[{id:'yellow'},{id:'yellow'}],stash:0,ach:{},tips:{},
-    lastSeen:Date.now(),clicks:0,tama:0,code,maxLv:1};
+  return {coins:0,food:5,owned:{yellow:1,red:1},tank:[{id:'yellow'},{id:'red'}],up:{},stash:0,ach:{},tips:{},
+    lastSeen:Date.now(),clicks:0,tama:0,code,maxStage:1};
 }
 function load(){
   try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)); if(s&&Array.isArray(s.tank)) return Object.assign(fresh(),s);}catch(e){}
@@ -38,10 +55,12 @@ function load(){
 const game=load();
 let fishes=[];
 function save(){
+  refreshBonus();
   game.tank=fishes.filter(f=>!f.gone).map(f=>({id:f.baseId||f.id,name:f.name||''}));
   game.lastSeen=Date.now();
   try{localStorage.setItem(SAVE_KEY,JSON.stringify(game));}catch(e){}
 }
+refreshBonus();
 
 /* ---------------- 그리기 도구 ---------------- */
 function colorOf(sp,ch,c,t){
@@ -177,6 +196,8 @@ const center=f=>({x:f.x+f.w/2,y:f.y+f.h/2});
 const alive=o=>fishes.includes(o)&&!o.drop&&!o.gone&&!o.away&&!o.hidden;
 const mouth=f=>({x:f.dir>0?f.x+f.w:f.x-1,y:f.y+f.sp.topH+4});
 const touching=(a,b,r=9)=>dist(center(a),center(b))<r;
+const chainCount=()=>fishes.filter(f=>!f.gone&&f.sp.stage).length;
+const varCount=()=>fishes.filter(f=>!f.gone&&!f.sp.stage).length;
 const tankCount=()=>fishes.filter(f=>!f.gone).length;
 const isSharp=f=>f.sp.sharp||(f.sp.beh==='puffer'&&f.puffT>0);
 function inFront(src,o,len=18){
@@ -433,7 +454,7 @@ function specialTick(f,dt,t,c){
     for(const o of others()) if(touching(f,o)){f.puffT=3; f.pcool=8; popText(c.x,f.y,'폭!');
       for(const q of others()) if(touching(f,q,16)){const qc=center(q),d=dist(qc,c)||1; q.vx+=(qc.x-c.x)/d*40; q.vy+=(qc.y-c.y)/d*25; q.stun=0.6;} break;}
   if(isSharp(f)) for(const o of others()) if(touching(f,o)) pierce(o,f);
-  if(b==='matry'&&!f.sisDone&&f.age>100+(f.ph*8)&&tankCount()<MAX_TANK){
+  if(b==='matry'&&!f.sisDone&&f.age>100+(f.ph*8)&&varCount()<VAR_MAX){
     f.sisDone=true; const {f:s,isNew}=addFish(sp.sis,{x:c.x,drop:false,y:f.y}); s.x=clamp(c.x,0,W-s.w);
     popText(c.x,f.y,'뽁!','gold'); if(isNew) toast(`새 친구! ${SP[sp.sis].name} ✨`);
   }
@@ -564,7 +585,7 @@ function drawGlow(f,t,dk){
 }
 
 /* ---------------- 동전 · 먹이 · 물보라 ---------------- */
-const coinValue=()=>Math.max(5,Math.round(sumCost(game.sumLv)*0.5));
+const coinValue=()=>Math.max(5,Math.round(incomeRate()*6));
 function spawnCoin(x,y,v){coins.push({x,y,vy:14,restY:SANDY-3+Math.floor(Math.random()*3),v:v||coinValue(),dead:false});}
 function feed(x,y){
   if(pellets.length>30)return;
@@ -581,56 +602,82 @@ function addFish(id,opt={}){
   checkCounts(); save();
   return {f,isNew};
 }
-function summon(){
-  const cost=sumCost(game.sumLv);
-  if(tankCount()>=MAX_TANK){toast('자리가 꽉 찼어요. 같은 레벨끼리 합쳐 보세요!');return;}
-  if(game.coins<cost){toast('코인이 '+cost+'개 필요해요');return;}
-  game.coins-=cost; game.sumCount++;
-  const lv=sumRoll(game.sumLv),sp=pick(BY_LV(lv));
-  const {f,isNew}=addFish(sp.id);
+function feedOne(auto){
+  if(game.food<1){if(!auto) toast('먹이가 충전 중이에요 🍤');return;}
+  if(chainCount()>=tankMax()){if(!auto) toast('어항이 꽉 찼어요. 같은 친구끼리 합쳐 보세요!');return;}
+  game.food-=1;
+  let st=feedStage(); if(Math.random()<upP()) st=Math.min(MAX_STAGE,st+1);
+  const id=pick(STAGE_IDS[st]);
+  const {f,isNew}=addFish(id);
   setTimeout(()=>popText(f.x+f.w/2,SKY+2,isNew?'NEW!':'퐁당!',isNew?'gold':''),400);
-  if(isNew) toast(`새 친구! ${LV_NAME[sp.lv]} ${sp.name} ✨`);
-  const L=sumLevel(game.sumCount);
-  if(L>game.sumLv){
-    game.sumLv=L;
-    toast(`⭐ 부르기 Lv${L}! ${L===2?'이제 가끔 Lv2 친구가 와요':L===5?'이제 가끔 Lv3 친구가 와요':L===9?'이제 가끔 Lv4 친구가 와요':'높은 레벨 친구가 더 자주 와요'}`,3000);
-    if(L>=5) unlock('sum5');
-  }
-  save(); updateHud();
+  if(isNew&&st>1) toast(`새 친구! ${SP[id].name} ✨`);
+  updateHud();
 }
-$('sumBtn').onclick=summon;
-function mergeFish(a,b){
-  const lv=a.sp.lv;
-  if(lv>=5){toast('Lv5끼리는 합칠 수 없어요. 둘이 사이좋게 지내요 ✨');return;}
+$('sumBtn').onclick=()=>feedOne(false);
+function mergeFish(a,b,auto){
+  const st=a.sp.stage;
+  if(st>=MAX_STAGE){toast('마지막 단계예요! 두 번째 바다는 곧 열려요 🌊');return;}
   const c=center(b);
   for(const o of [a,b]){
     if(o.carry) dropCarry(o);
-    if(o.link){o.link.link=null; o.link.lead=false;}
     fishes.splice(fishes.indexOf(o),1);
   }
-  const sp=pick(BY_LV(lv+1));
-  const isNew=!game.owned[sp.id];
-  game.owned[sp.id]=(game.owned[sp.id]||0)+1;
-  const f=makeFish(sp.id,{});
+  let ns=st+1,jumped=false;
+  if(ns<MAX_STAGE&&Math.random()<jumpP()){ns++; jumped=true;}
+  const id=pick(STAGE_IDS[ns]),sp=SP[id];
+  const isNew=!game.owned[id];
+  game.owned[id]=(game.owned[id]||0)+1;
+  const f=makeFish(id,{});
   f.x=clamp(c.x-f.w/2,0,W-f.w); f.y=clamp(c.y-f.h/2,SKY+3,SANDY-f.h-1);
   fishes.push(f);
   for(let i=0;i<12;i++) parts.push({k:'spark',x:c.x+rand(-8,8),y:c.y+rand(-6,6),life:0.6+Math.random()*0.5});
   parts.push({k:'heart',x:c.x-2,y:c.y-10,life:1.2});
-  popText(c.x,c.y-6,'뿅!','gold');
-  unlock('merge'); if(sp.lv>game.maxLv) game.maxLv=sp.lv;
-  if(sp.lv>=3) unlock('lv3'); if(sp.lv>=4) unlock('lv4'); if(sp.lv>=5) unlock('lv5');
+  popText(c.x,c.y-6,jumped?'두 단계 점프!':auto?'쪽!':'뿅!','gold');
+  unlock('merge'); if(jumped) unlock('jump');
+  if(ns>game.maxStage) game.maxStage=ns;
+  if(ns>=10) unlock('s10'); if(ns>=30) unlock('s30'); if(ns>=MAX_STAGE) unlock('s60');
+  // 변종이 튀어나올 수도!
+  if(Math.random()<luckP()) setTimeout(()=>spawnVariant(c.x),500);
   checkCounts(); save(); updateHud();
   if(isNew) showReveal(sp,true);
-  else toast(`${LV_NAME[sp.lv]} ${sp.name} 탄생!`);
+}
+function spawnVariant(x){
+  const un=VAR_POOL.filter(s=>!game.owned[s.id]);
+  const sp=un.length&&Math.random()<0.75?pick(un):pick(VAR_POOL);
+  const isNew=!game.owned[sp.id];
+  if(varCount()<VAR_MAX){const {f}=addFish(sp.id,{x:clamp(x-7,0,W-14)}); setTimeout(()=>popText(f.x+f.w/2,SKY+2,'변종 등장!','gold'),400);}
+  else{game.owned[sp.id]=(game.owned[sp.id]||0)+1; toast(`변종 ${sp.name}을(를) 만났어요! (어항이 붐벼서 도감에 보관)`,2800);}
+  refreshBonus(); unlock('var1');
+  if(DEX_VAR.filter(s=>game.owned[s.id]).length>=10) unlock('var10');
+  save();
+  if(isNew) showReveal(sp,true);
+}
+function autoMergeOnce(){
+  const by={};
+  for(const f of fishes) if(alive(f)&&f.sp.stage&&f.sp.stage<MAX_STAGE&&!f.held) (by[f.sp.stage]=by[f.sp.stage]||[]).push(f);
+  const st=Object.keys(by).map(Number).filter(k=>by[k].length>=2).sort((a,b)=>a-b)[0];
+  if(!st) return;
+  const [a,b]=by[st];
+  mergeFish(a,b,true);
+}
+const kindLabel=sp=>sp.stage?'일반 바다':sp.secret?'비밀 변종':'변종';
+const kindCls=sp=>sp.stage?(sp.stage<20?'r0':sp.stage<40?'r1':'r3'):sp.secret?'r3':'r2';
+function bonusText(b){
+  if(!b) return '';
+  const T={coin:v=>`버는 코인 +${v}%`,slot:v=>`어항 자리 +${v}`,disc:v=>`상점 할인 ${v}%`,jump:v=>`두 단계 점프 +${v}%`,
+    luck:v=>`변종 등장 확률 +${v}%`,up:v=>`먹이로 한 단계 위 친구가 올 확률 +${v}%`,feed:v=>`먹이 충전 ${v}초 빨라짐`,cap:v=>`먹이 통 +${v}`};
+  return Object.entries(b).map(([k,v])=>T[k]?T[k](v):'').join(', ');
 }
 function showReveal(sp,isNew,fromDex){
   const m=$('revealModal'),body=$('revealBody');
+  const st=sp.stage?Math.min(3,Math.floor((sp.stage-1)/15)):sp.secret?3:2;
   const show=()=>{
-    body.innerHTML=`<div class="stage st${Math.min(3,sp.lv-1)}" id="stage"></div>
-      <div class="${LV_CLS[sp.lv]}">★ ${LV_NAME[sp.lv]} ★</div>
+    body.innerHTML=`<div class="stage st${st}" id="stage"></div>
+      <div class="${kindCls(sp)}">★ ${kindLabel(sp)} ★</div>
       <h3>${sp.name} ${isNew?'<span class="new">NEW!</span>':''}</h3>
       <p>${sp.desc}</p>
-      ${sp.lv?`<p style="font-size:12px;opacity:.7">한 마리가 1초에 코인 ${INC(sp.lv)<1?INC(sp.lv).toFixed(1):Math.round(INC(sp.lv))}개를 벌어요</p>`:''}
+      ${sp.stage?`<p style="font-size:12px;opacity:.7">한 마리가 1초에 코인 ${fmtN2(INC(sp.stage))}개를 벌어요</p>`:''}
+      ${sp.bonus?`<p class="r2" style="font-size:13px">✦ 보너스: ${bonusText(sp.bonus)}</p>`:''}
       <button class="btn primary" id="rvOk">${fromDex?'닫기':'좋아!'}</button>`;
     $('stage').appendChild(spriteCanvas(sp,8,false));
     $('rvOk').onclick=()=>m.classList.remove('open');
@@ -645,7 +692,7 @@ function showReveal(sp,isNew,fromDex){
 /* ---------------- 배경 이벤트 ---------------- */
 let evT=50+Math.random()*40,rainT=0;
 function startUfo(target){
-  const tgt=target||pick(fishes.filter(f=>f.sp.lv<=2&&alive(f)));
+  const tgt=target||pick(fishes.filter(f=>f.sp.stage&&f.sp.stage<=5&&alive(f)));
   if(!tgt) return;
   events.push({k:'ufo',tgt,x:center(tgt).x-5,y:-6,ph:'in',t:0});
 }
@@ -653,7 +700,7 @@ function startEvent(){
   const night=isNight(),opts=[['boat',22],['ducks',18],['whale',20]];
   if(rainT<=0) opts.push(['rain',16]);
   if(night) opts.push(['meteor',22]);
-  if(fishes.filter(f=>f.sp.lv<=2&&alive(f)).length&&tankCount()>=5&&!events.some(e=>e.k==='ufo')) opts.push(['ufo',4]);
+  if(fishes.filter(f=>f.sp.stage&&f.sp.stage<=5&&alive(f)).length&&tankCount()>=5&&!events.some(e=>e.k==='ufo')) opts.push(['ufo',4]);
   let tot=opts.reduce((a,o)=>a+o[1],0),r=Math.random()*tot,k='boat';
   for(const [n,w] of opts){if(r<w){k=n;break;} r-=w;}
   const dir=Math.random()<.5?1:-1;
@@ -745,11 +792,14 @@ function drawSky(t,dk){
 }
 
 /* ---------------- 메인 루프 ---------------- */
-let last=performance.now(),hudT=0,saveT=0;
-const incomeRate=()=>fishes.reduce((a,f)=>a+(f.gone?0:INC(f.sp.lv||1)),0);
+let last=performance.now(),hudT=0,saveT=0,autoTimer=20,autoFeedTimer=20;
+const incomeRate=()=>fishes.reduce((a,f)=>a+(f.gone||!f.sp.stage?0:INC(f.sp.stage)),0)*coinMul();
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now; const t=now/1000,dk=darkness();
   game.coins+=incomeRate()*dt;
+  game.food=Math.min(foodMax(),game.food+dt/regenT());
+  if(UP('autofeed')>0){autoFeedTimer-=dt; if(autoFeedTimer<=0){autoFeedTimer=autoFeedT(); feedOne(true);}}
+  if(UP('auto')>0){autoTimer-=dt; if(autoTimer<=0){autoTimer=autoT(); autoMergeOnce();}}
   for(const f of [...fishes]) if(fishes.includes(f)) updateFish(f,dt,t);
   for(const k of coins) if(k.y<k.restY) k.y=Math.min(k.restY,k.y+k.vy*dt);
   coins=coins.filter(k=>!k.dead);
@@ -847,7 +897,7 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 const chestVisible=()=>game.stash>0||fishes.some(f=>f.sp.beh==='thief');
-const canMerge=(a,o)=>o!==a&&alive(o)&&a.sp.lv===o.sp.lv&&!a.sp.hidden&&!o.sp.hidden;
+const canMerge=(a,o)=>o!==a&&alive(o)&&!!a.sp.stage&&a.sp.stage===o.sp.stage;
 
 /* ---------------- 터치 ---------------- */
 let lastTap={f:null,t:0},drag=null;
@@ -936,21 +986,39 @@ function popText(lx,ly,txt,cls=''){
 }
 $('coinIco').appendChild(spriteCanvas(COIN,3));
 const fmtN=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e4?(n/1e3).toFixed(1)+'k':String(Math.floor(n));
+function fmtN2(n){return n<10?(Math.round(n*10)/10).toString():fmtN(n);}
 function updateHud(){
   $('coinTxt').textContent=fmtN(game.coins);
-  const r=incomeRate(); $('rateTxt').textContent='+'+(r<10?r.toFixed(1):fmtN(r))+'/초';
-  $('tankTxt').textContent=tankCount()+'/'+MAX_TANK;
-  const L=game.sumLv,lo=SUM_T[L-1]??0,hi=SUM_T[L];
-  $('sumLvTxt').textContent='부르기 Lv'+L;
-  $('gfill').style.width=(hi?clamp((game.sumCount-lo)/(hi-lo)*100,0,100):100)+'%';
-  const cost=sumCost(L);
-  $('sumBtn').textContent='부르기 '+cost;
-  $('sumBtn').disabled=game.coins<cost||tankCount()>=MAX_TANK;
+  $('rateTxt').textContent='+'+fmtN2(incomeRate())+'/초';
+  $('tankTxt').textContent=chainCount()+'/'+tankMax();
+  const fm=foodMax(),fl=Math.floor(game.food);
+  $('foodTxt').textContent=fl+'/'+fm;
+  $('gfill').style.width=(fl>=fm?100:(game.food-fl)*100)+'%';
+  $('sumBtn').textContent='먹이 🍤'+fl;
+  $('sumBtn').disabled=fl<1||chainCount()>=tankMax();
+  if($('shopModal').classList.contains('open')) renderShop(true);
 }
-$('sumChip').onclick=()=>{
-  const L=game.sumLv,hi=SUM_T[L];
-  toast(hi?`부르기 Lv${L} · 다음 레벨까지 ${hi-game.sumCount}번 더 불러요`:`부르기 Lv${L} (최고 레벨!)`);
-};
+$('sumChip').onclick=()=>toast(`먹이 ${Math.floor(game.food)}/${foodMax()} · ${regenT().toFixed(1)}초마다 1개씩 차요 · 어항 ${chainCount()}/${tankMax()}`);
+
+/* ---------- 상점 ---------- */
+function renderShop(soft){
+  const html=SHOP.map(it=>{
+    const lv=UP(it.id),max=lv>=it.max,cost=shopCost(it);
+    return `<div class="zone"><div class="info"><b>${it.name}</b> <small style="display:inline">Lv${lv}</small><small>${it.desc}</small></div>
+      <button class="btn ${max?'':'primary'}" data-buy="${it.id}" ${max||game.coins<cost?'disabled':''}>${max?'최대':'🪙'+fmtN(cost)}</button></div>`;
+  }).join('')+`<small>변종 보너스: ${bonusText(Object.fromEntries(Object.entries(BON).filter(([k,v])=>v)))||'아직 없어요'}</small>`;
+  const el=$('shopBody');
+  if(soft&&el.dataset.h===html) return;
+  el.dataset.h=html; el.innerHTML=html;
+  el.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>{
+    const it=SHOP.find(x=>x.id===b.dataset.buy),cost=shopCost(it);
+    if(game.coins<cost||UP(it.id)>=it.max) return;
+    game.coins-=cost; game.up[it.id]=UP(it.id)+1; unlock('shop'); if(it.id==='auto') unlock('auto');
+    save(); updateHud(); renderShop();
+    toast(`${it.name} Lv${UP(it.id)}!`);
+  });
+}
+$('shopBtn').onclick=()=>{renderShop(); $('shopModal').classList.add('open');};
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('.modal').classList.remove('open'));
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('pointerdown',e=>{if(e.target===m)m.classList.remove('open');}));
 
@@ -958,7 +1026,7 @@ document.querySelectorAll('.modal').forEach(m=>m.addEventListener('pointerdown',
 let renaming=null;
 function openRename(f){
   renaming=f;
-  $('nameWho').innerHTML=`<span class="${LV_CLS[f.sp.lv]}">${f.sp.name}</span>의 이름을 지어 주세요.`;
+  $('nameWho').innerHTML=`<span class="${kindCls(f.sp)}">${f.sp.name}</span>의 이름을 지어 주세요.`;
   $('nameInput').value=f.name||'';
   $('nameModal').classList.add('open');
   setTimeout(()=>$('nameInput').focus(),50);
@@ -983,8 +1051,7 @@ function renderDex(){
   const got=DEX.filter(s=>game.owned[s.id]).length;
   $('dexCount').textContent=` ${got}/${DEX.length}`;
   const body=$('dexBody'); body.innerHTML='';
-  const groups=[1,2,3,4,5].map(l=>({t:LV_NAME[l],cls:LV_CLS[l],list:DEX.filter(s=>s.lv===l&&!s.secret)}));
-  groups.push({t:'비밀 친구',cls:'r3',list:DEX.filter(s=>s.secret)});
+  const groups=[{t:'일반 바다',cls:'r1',list:DEX_CHAIN},{t:'변종',cls:'r2',list:DEX_VAR},{t:'비밀 친구',cls:'r3',list:DEX_SECRET}];
   for(const g of groups){
     const n=g.list.filter(s=>game.owned[s.id]).length;
     body.insertAdjacentHTML('beforeend',`<div class="dexh"><span class="${g.cls}">${g.t}</span><small>${n}/${g.list.length}</small></div>`);
@@ -997,7 +1064,7 @@ function renderDex(){
       card.insertAdjacentHTML('beforeend',`<div>${has?s.name:'???'}</div>${has&&cnt?`<div class="${g.cls}">${cnt}마리</div>`:''}`);
       card.onclick=()=>{
         if(has){showReveal(s,false,true);return;}
-        const where=s.secret?(s.hint||'비밀 조건으로 만날 수 있어요.'):s.lv===1?'부르기로 만날 수 있어요.':`${LV_NAME[s.lv-1]} 친구 둘을 합치면 나올 수 있어요.`;
+        const where=s.secret?(s.hint||'비밀 조건으로 만날 수 있어요.'):s.stage===1?'먹이를 주면 와요.':s.stage?'바로 앞 친구 둘을 합치면 만날 수 있어요.':'친구들을 합칠 때 가끔 튀어나와요.';
         $('dexInfo').innerHTML=`<b>???</b> · <span class="${g.cls}">${g.t}</span><br>아직 못 만났어요. ${where}`;
       };
       grid.appendChild(card);
@@ -1010,11 +1077,15 @@ $('dexBtn').onclick=()=>{renderDex(); $('dexModal').classList.add('open');};
 /* ---------- 도전 과제 ---------- */
 const ACH=[
   ['merge','뿅!','처음으로 물고기 합치기'],
-  ['lv3','쑥쑥','Lv3 친구 만들기'],
-  ['lv4','특별한 친구','Lv4 친구 만들기'],
-  ['lv5','전설을 만나다','Lv5 친구 만들기'],
+  ['s10','쑥쑥','일반 바다 10단계 친구 만나기'],
+  ['s30','반환점','일반 바다 30단계 친구 만나기'],
+  ['s60','무지개 너머','일반 바다 마지막 친구 만나기'],
+  ['jump','점프!','두 단계 점프 성공'],
+  ['var1','변종이다!','처음으로 변종 만나기'],
+  ['var10','변종 수집가','변종 10종 만나기'],
+  ['shop','첫 쇼핑','상점에서 처음 업그레이드하기'],
+  ['auto','큐피드','자동 합치기 사기'],
   ['full','만석입니다','어항을 가득 채우기'],
-  ['sum5','단골손님','부르기 Lv5 달성'],
   ['name','이름을 불러 줘','물고기에게 이름 지어 주기'],
   ['rain','비 오는 날','바다에 비가 내리는 걸 보기'],
   ['star','소원을 빌어 봐','밤하늘의 별똥별 보기'],
@@ -1053,11 +1124,11 @@ function unlock(id){
   save();
 }
 function checkCounts(){
-  if(tankCount()>=MAX_TANK) unlock('full');
+  if(chainCount()>=tankMax()) unlock('full');
   if(DEX.every(s=>game.owned[s.id])) unlock('all');
   if(!game.tips.merge){
-    const lvs=fishes.filter(f=>alive(f)).map(f=>f.sp.lv);
-    if(lvs.some((l,i)=>lvs.indexOf(l)!==i)){game.tips.merge=1; toast('같은 레벨 친구 둘을 끌어다 겹쳐 보세요 👆');}
+    const lvs=fishes.filter(f=>alive(f)&&f.sp.stage).map(f=>f.sp.stage);
+    if(lvs.some((l,i)=>lvs.indexOf(l)!==i)){game.tips.merge=1; toast('같은 단계 친구 둘을 끌어다 겹쳐 보세요 👆');}
   }
 }
 function renderAch(){
@@ -1076,16 +1147,17 @@ resize();
 fishes=game.tank.filter(o=>SP[o.id]&&(!SP[o.id].hidden||SP[o.id].slime)).map(o=>makeFish(o.id,{name:o.name}));
 // 자리 비운 동안 번 코인 (최대 4시간, 절반)
 {
-  const away=Math.min(4*3600,(Date.now()-(game.lastSeen||Date.now()))/1000);
+  const away=clamp((Date.now()-(game.lastSeen||Date.now()))/1000,0,4*3600);
   const gain=Math.floor(incomeRate()*away*0.5);
+  game.food=Math.min(foodMax(),game.food+away/regenT());
   if(away>60&&gain>0){game.coins+=gain; setTimeout(()=>toast(`자리 비운 동안 코인 ${fmtN(gain)}개가 쌓였어요 🪙`,3000),600);}
 }
 updateHud();
 requestAnimationFrame(frame);
 if(!game.tips.start){
   game.tips.start=1;
-  setTimeout(()=>toast('같은 레벨 친구 둘을 끌어다 겹치면 합쳐져요!',2800),500);
-  setTimeout(()=>toast('가만히 있어도 코인이 쌓여요. 코인으로 친구를 불러요 🪙',2800),600);
+  setTimeout(()=>toast('같은 친구 둘을 끌어다 겹치면 다음 친구로 합쳐져요! (색만 다르면 같은 친구)',3000),500);
+  setTimeout(()=>toast('먹이 🍤로 친구를 부르고, 쌓인 코인으로 상점에서 업그레이드해요',3000),600);
   setTimeout(()=>toast('물을 톡 치면 먹이가 떨어져요 🍤',2600),700);
   save();
 }
