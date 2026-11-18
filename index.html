@@ -987,7 +987,7 @@ function renderDex(){
     const has=!!game.owned[s.id],card=document.createElement('div');
     card.className='card';
     const pic=document.createElement('div'); pic.className='pic'; pic.appendChild(spriteCanvas(s,3,!has)); card.appendChild(pic);
-    card.insertAdjacentHTML('beforeend',`<div>${has?s.name:'???'}</div><div class="r${s.rar}">${RAR[s.rar]}${has?' ×'+game.owned[s.id]:''}</div>`);
+    card.insertAdjacentHTML('beforeend',`<div>${has?s.name:'???'}</div><div class="r${s.rar}">${RAR[s.rar]}${has?' · '+fishes.filter(f=>f.id===s.id&&!f.gone).length+'마리':''}</div>`);
     card.onclick=()=>{
       grid.querySelectorAll('.card').forEach(c=>c.classList.remove('sel')); card.classList.add('sel');
       const where=s.secret?(s.hint||'비밀 조건으로 만날 수 있어요.'):s.rar===0?'게이지가 차면 찾아와요.':
