@@ -45,7 +45,7 @@ const shopCost=it=>Math.round(it.base*Math.pow(it.g,UP(it.id))*(1-disc()));
 const SAVE_KEY='pixel-aquarium-v4';
 function fresh(){
   const code=String(Math.floor(1000+Math.random()*9000));
-  return {coins:0,food:5,owned:{yellow:1,red:1},tank:[{id:'yellow'},{id:'red'}],up:{},stash:0,ach:{},tips:{},
+  return {coins:0,food:5,owned:{yellow:2},tank:[{id:'yellow'},{id:'yellow'}],up:{},stash:0,ach:{},tips:{},
     lastSeen:Date.now(),clicks:0,tama:0,code,maxStage:1};
 }
 function load(){
@@ -654,10 +654,10 @@ function spawnVariant(x){
 }
 function autoMergeOnce(){
   const by={};
-  for(const f of fishes) if(alive(f)&&f.sp.stage&&f.sp.stage<MAX_STAGE&&!f.held) (by[f.sp.stage]=by[f.sp.stage]||[]).push(f);
-  const st=Object.keys(by).map(Number).filter(k=>by[k].length>=2).sort((a,b)=>a-b)[0];
-  if(!st) return;
-  const [a,b]=by[st];
+  for(const f of fishes) if(alive(f)&&f.sp.stage&&f.sp.stage<MAX_STAGE&&!f.held) (by[f.id]=by[f.id]||[]).push(f);
+  const id=Object.keys(by).filter(k=>by[k].length>=2).sort((a,b)=>SP[a].stage-SP[b].stage)[0];
+  if(!id) return;
+  const [a,b]=by[id];
   mergeFish(a,b,true);
 }
 const kindLabel=sp=>sp.stage?'일반 바다':sp.secret?'비밀 변종':'변종';
@@ -897,7 +897,7 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 const chestVisible=()=>game.stash>0||fishes.some(f=>f.sp.beh==='thief');
-const canMerge=(a,o)=>o!==a&&alive(o)&&!!a.sp.stage&&a.sp.stage===o.sp.stage;
+const canMerge=(a,o)=>o!==a&&alive(o)&&!!a.sp.stage&&a.id===o.id;
 
 /* ---------------- 터치 ---------------- */
 let lastTap={f:null,t:0},drag=null;
@@ -1127,8 +1127,8 @@ function checkCounts(){
   if(chainCount()>=tankMax()) unlock('full');
   if(DEX.every(s=>game.owned[s.id])) unlock('all');
   if(!game.tips.merge){
-    const lvs=fishes.filter(f=>alive(f)&&f.sp.stage).map(f=>f.sp.stage);
-    if(lvs.some((l,i)=>lvs.indexOf(l)!==i)){game.tips.merge=1; toast('같은 단계 친구 둘을 끌어다 겹쳐 보세요 👆');}
+    const ids=fishes.filter(f=>alive(f)&&f.sp.stage).map(f=>f.id);
+    if(ids.some((l,i)=>ids.indexOf(l)!==i)){game.tips.merge=1; toast('똑같은 친구 둘을 끌어다 겹쳐 보세요 👆');}
   }
 }
 function renderAch(){
@@ -1156,7 +1156,7 @@ updateHud();
 requestAnimationFrame(frame);
 if(!game.tips.start){
   game.tips.start=1;
-  setTimeout(()=>toast('같은 친구 둘을 끌어다 겹치면 다음 친구로 합쳐져요! (색만 다르면 같은 친구)',3000),500);
+  setTimeout(()=>toast('똑같은 친구 둘을 끌어다 겹치면 다음 친구로 합쳐져요!',3000),500);
   setTimeout(()=>toast('먹이 🍤로 친구를 부르고, 쌓인 코인으로 상점에서 업그레이드해요',3000),600);
   setTimeout(()=>toast('물을 톡 치면 먹이가 떨어져요 🍤',2600),700);
   save();
