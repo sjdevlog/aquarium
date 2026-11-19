@@ -16,7 +16,7 @@ const SHOP=[
   {id:'tank',name:'어항 넓히기',desc:'어항 자리 +1',base:30,g:1.45,max:28},
   {id:'food',name:'먹이 통',desc:'먹이를 1개 더 모아 둘 수 있어요',base:20,g:1.5,max:20},
   {id:'regen',name:'먹이 충전',desc:'먹이가 0.5초 더 빨리 차요',base:25,g:1.55,max:12},
-  {id:'feedUp',name:'먹이 업그레이드',desc:'먹이로 오는 친구가 한 단계 높아져요',base:120,g:1.9,max:44},
+  {id:'feedUp',name:'먹이 업그레이드',desc:'먹이로 오는 친구가 한 단계 높아져요',base:120,g:1.9,max:74},
   {id:'jump',name:'두 단계 점프',desc:'합칠 때 2단계가 한꺼번에 오를 확률 +2%',base:60,g:1.6,max:20},
   {id:'auto',name:'자동 합치기',desc:'알아서 같은 친구끼리 합쳐 줘요 (Lv마다 1초씩 빨라짐)',base:200,g:1.6,max:20},
   {id:'autofeed',name:'자동 먹이',desc:'알아서 먹이를 줘요 (Lv마다 1초씩 빨라짐)',base:150,g:1.6,max:16},
@@ -635,7 +635,7 @@ function mergeFish(a,b,auto){
   popText(c.x,c.y-6,jumped?'두 단계 점프!':auto?'쪽!':'뿅!','gold');
   unlock('merge'); if(jumped) unlock('jump');
   if(ns>game.maxStage) game.maxStage=ns;
-  if(ns>=10) unlock('s10'); if(ns>=30) unlock('s30'); if(ns>=MAX_STAGE) unlock('s60');
+  if(ns>=10) unlock('s10'); if(ns>=30) unlock('s30'); if(ns>=60) unlock('s60'); if(ns>=MAX_STAGE) unlock('s100');
   // 변종이 튀어나올 수도!
   if(Math.random()<luckP()) setTimeout(()=>spawnVariant(c.x),500);
   checkCounts(); save(); updateHud();
@@ -661,7 +661,7 @@ function autoMergeOnce(){
   mergeFish(a,b,true);
 }
 const kindLabel=sp=>sp.stage?'일반 바다':sp.secret?'비밀 변종':'변종';
-const kindCls=sp=>sp.stage?(sp.stage<20?'r0':sp.stage<40?'r1':'r3'):sp.secret?'r3':'r2';
+const kindCls=sp=>sp.stage?(sp.stage<34?'r0':sp.stage<67?'r1':'r3'):sp.secret?'r3':'r2';
 function bonusText(b){
   if(!b) return '';
   const T={coin:v=>`버는 코인 +${v}%`,slot:v=>`어항 자리 +${v}`,disc:v=>`상점 할인 ${v}%`,jump:v=>`두 단계 점프 +${v}%`,
@@ -670,7 +670,7 @@ function bonusText(b){
 }
 function showReveal(sp,isNew,fromDex){
   const m=$('revealModal'),body=$('revealBody');
-  const st=sp.stage?Math.min(3,Math.floor((sp.stage-1)/15)):sp.secret?3:2;
+  const st=sp.stage?Math.min(3,Math.floor((sp.stage-1)/25)):sp.secret?3:2;
   const show=()=>{
     body.innerHTML=`<div class="stage st${st}" id="stage"></div>
       <div class="${kindCls(sp)}">★ ${kindLabel(sp)} ★</div>
@@ -985,7 +985,11 @@ function popText(lx,ly,txt,cls=''){
   setTimeout(()=>d.remove(),1150);
 }
 $('coinIco').appendChild(spriteCanvas(COIN,3));
-const fmtN=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e4?(n/1e3).toFixed(1)+'k':String(Math.floor(n));
+function fmtN(n){
+  const U=[[1e18,'Qi'],[1e15,'Qa'],[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e4,'k']];
+  for(const [v,u] of U) if(n>=v) return (n/v).toFixed(1)+u;
+  return String(Math.floor(n));
+}
 function fmtN2(n){return n<10?(Math.round(n*10)/10).toString():fmtN(n);}
 function updateHud(){
   $('coinTxt').textContent=fmtN(game.coins);
@@ -1079,7 +1083,8 @@ const ACH=[
   ['merge','뿅!','처음으로 물고기 합치기'],
   ['s10','쑥쑥','일반 바다 10단계 친구 만나기'],
   ['s30','반환점','일반 바다 30단계 친구 만나기'],
-  ['s60','무지개 너머','일반 바다 마지막 친구 만나기'],
+  ['s60','절반은 넘었다','일반 바다 60단계 친구 만나기'],
+  ['s100','무지개 너머','일반 바다 100단계 친구 만나기'],
   ['jump','점프!','두 단계 점프 성공'],
   ['var1','변종이다!','처음으로 변종 만나기'],
   ['var10','변종 수집가','변종 10종 만나기'],

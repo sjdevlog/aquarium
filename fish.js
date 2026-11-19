@@ -473,16 +473,10 @@ F('puzzle','퍼즐 물고기',0,['#ffffff','#ffffff','#e0e0e0'],d=>{for(let y=1;
 F('luckybag','복주머니 물고기',0,['#e8394a','#ff8a8a','#ffcf3a'],d=>{d.top(["......A.A....."]);d.pts([[6,3],[7,3],[6,4],[7,4]],'A');d.hs([2],'A');},'가지고 있으면 복이 들어와요.',{bonus:{coin:12}});
 
 /* ---------------- 역할 정하기 ----------------
-   일반 바다 60단계: 둘기 출신과 오리 출신을 섞었어요. 1단계는 색만 다른 민무늬 친구들.
+   일반 바다 100단계: 둘기 출신과 오리 출신을 섞었어요. 한 단계에 한 종류씩.
    나머지는 변종: 합칠 때 가끔 튀어나오고, 만나면 보너스가 생겨요. */
 const CHAIN=[
-  ['yellow','red','black','gray','mint','pink'],
-  'white','chicken','dots','rainy','snowy','shades','burglar','bath','flowery','chef',
-  'panda','fishking','booster','melon','chess','number','berry','muscle','genie','frogsuit',
-  'march','sphinx','princess','monafish','robot','cow','joystick','traffic','hotdog','donut',
-  'carrot','manhole','coinfish','astronaut','exitfish','mountain','sunny','dino','pillow','banana',
-  'clock','laundry','porcelain','bulb','fanfish','bighat','lipstick','shootstar','popcorn','gentle',
-  'popsicle','thunder','crystal','conch','medal','earth','cube','gold','rainbow'
+  'yellow','red','white','black','chicken','gray','dots','mint','rainy','pink','snowy','baby','shades','eggshell','burglar','pastel','bath','ladybug','flowery','toy','chef','whiteheart','panda','cherrylet','fishking','toast','booster','pinkbolt','melon','storm','chess','cactus','number','camo','berry','leopard','muscle','tiger','genie','hypno','frogsuit','pineapple','march','orange','sphinx','ruby','princess','pizza','monafish','sushi','robot','pancake','cow','icecream','joystick','cheesemoon','traffic','egghat','hotdog','cat','donut','bunnysuit','carrot','raccoon','manhole','dove','coinfish','mushroom','astronaut','sweater','exitfish','mountain','sunny','dino','pillow','banana','clock','laundry','porcelain','bulb','fanfish','bighat','lipstick','shootstar','popcorn','gentle','popsicle','thunder','crystal','conch','medal','earth','cube','whiteglow','glowy','stained','neon','hologram','gold','rainbow'
 ];
 const MAX_STAGE=CHAIN.length;
 const STAGE_IDS={};
